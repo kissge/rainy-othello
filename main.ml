@@ -6,7 +6,7 @@ open Color
 open Printf
 
 let opt_verbose     = ref false 
-let opt_player_name = ref "Anon."
+let opt_player_name = ref "RAINYv1.0"
 let opt_port        = ref 3000
 let opt_host        = ref "localhost" 
 
@@ -77,17 +77,17 @@ let rec wait_start (ic,oc) =
       Bye scores ->
         print_scores scores 
     | Start (color, oname, mytime) -> 
-      let board = init_board () in 
+      let (board, phase) = init_board () in 
       if color = black then 
-        my_move (ic,oc) board color [] oname mytime 
+        my_move (ic,oc) (board, phase) color [] oname mytime 
       else
-        op_move (ic,oc) board color [] oname mytime 
+        op_move (ic,oc) (board, phase) color [] oname mytime 
     | _ -> 
       failwith "Invalid Command" 
 
-and my_move (ic,oc) board color hist oname mytime =
-  let pmove = play board color in 
-  let board = doMove board pmove color in 
+and my_move (ic,oc) (board, phase) color hist oname mytime =
+  let pmove = play (board, phase) color in 
+  let (board, phase) = doMove (board, phase) pmove color in 
   let _ = output_command oc (Move pmove) in 
   let _ = if !opt_verbose then 
       (print_endline "--------------------------------------------------------------------------------";
@@ -95,21 +95,21 @@ and my_move (ic,oc) board color hist oname mytime =
        print_board board) in 
   match input_command ic with 
     | Ack mytime' -> 
-      op_move (ic,oc) board color (PMove pmove :: hist) oname mytime' 
+      op_move (ic,oc) (board, phase) color (PMove pmove :: hist) oname mytime' 
     | End (wl,n,m,r) ->
       proc_end (ic,oc) board color hist oname wl n m r 
     | _ -> 
       failwith "Invaid Command" 
 
-and op_move (ic,oc) board color hist oname mytime = 
+and op_move (ic,oc) (board, phase) color hist oname mytime = 
   match input_command ic with 
     | Move omove -> 
-      let board = doMove board omove (opposite_color color) in 
+      let (board, phase) = doMove (board, phase) omove (opposite_color color) in 
       let _ = if !opt_verbose then 
           (print_endline "--------------------------------------------------------------------------------";
            print_endline ("OMove: " ^ string_of_move omove ^ " " ^ string_of_color color);
            print_board board) in 
-      my_move (ic,oc) board color (OMove omove :: hist) oname mytime 
+      my_move (ic,oc) (board, phase) color (OMove omove :: hist) oname mytime 
     | End (wl,n,m,r) -> 
       proc_end (ic,oc) board color hist oname wl n m r 
     | _ ->

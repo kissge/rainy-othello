@@ -1,0 +1,17 @@
+server
+*.annot
+*.cmo
+*.cma
+*.cmi
+*.a
+*.o
+*.cmx
+*.cmxs
+*.cmxa
+reversi
+._bcdi
+._d
+commandLexer.ml
+commandParser.ml
+commandParser.mli
+*#*

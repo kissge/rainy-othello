@@ -17,7 +17,7 @@ let init_board () =
     board.(5).(5) <- white;
     board.(4).(5) <- black;
     board.(5).(4) <- black;
-    board
+    (board, 4)
 
 let dirs = [ (-1,-1); (0,-1); (1,-1); (-1,0); (1,0); (-1,1); (0,1); (1,1) ]
 
@@ -52,16 +52,16 @@ let is_valid_move board color (i,j) =
   (board.(i).(j) = none) && is_effective board color (i,j)
 
 
-let doMove board com color =
+let doMove (board, phase) com color =
   match com with
-      GiveUp  -> board
-    | Pass    -> board
+      GiveUp  -> (board, phase)
+    | Pass    -> (board, phase)
     | Mv (i,j) ->
 	let ms = flippable_indices board color (i,j) in
 	let _  = List.map (fun (ii,jj) -> board.(ii).(jj) <- color) ms in
 	let _  = board.(i).(j) <- color in
-	  board
-    | _ -> board
+	  (board, phase + 1)
+    | _ -> (board, phase)
 
 let mix xs ys =
   List.concat (List.map (fun x -> List.map (fun y -> (x,y)) ys) xs)
@@ -73,14 +73,20 @@ let valid_moves board color =
     (mix ls ls)
 
 
-let play board color =
-  let ms = valid_moves board color in
+let play (board, phase) color =
+  print_string "Phase: ";
+  print_int phase;
+  print_endline "";
+  if phase = 4 then
+    Mv (6, 5)
+  else
+    let ms = valid_moves board color in
     if ms = [] then
       Pass
     else
       let k = Random.int (List.length ms) in
       let (i,j) = List.nth ms k in
-	Mv (i,j)
+      Mv (i,j)
 
 let count board color =
   let s = ref 0 in
