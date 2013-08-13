@@ -9,6 +9,7 @@ server
 *.cmxs
 *.cmxa
 reversi
+._ncdi
 ._bcdi
 ._d
 commandLexer.ml
