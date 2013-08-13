@@ -73,6 +73,27 @@ let valid_moves board color =
     (mix ls ls)
 
 
+let search_priority board color =
+  let priority_list =
+    [
+      (1,1);(1,8);(8,1);(8,8);
+      (1,3);(3,1);(1,6);(6,1);(3,8);(8,3);(6,8);(8,6);
+      (3,3);(3,6);(6,3);(6,6);
+      (1,4);(1,5);(4,1);(5,1);(4,8);(5,8);(8,4);(8,5);
+      (3,4);(3,5);(4,3);(5,3);(4,5);(4,6);(5,4);(6,4);
+      (2,3);(2,4);(2,5);(2,6);(3,2);(4,2);(5,2);(6,2);(3,7);(4,7);(5,7);(6,7);(7,3);(7,4);(7,5);(7,6);
+      (1,2);(2,1);(1,7);(2,8);(7,1);(8,2);(7,8);(8,7);
+      (2,2);(2,7);(7,2);(7,7)
+    ] in
+  let rec search move =
+    match move with (i, j)::ms ->
+      if is_valid_move board color (i, j) then Mv (i, j)
+      else search ms
+    | [] -> Pass
+  in
+  search priority_list
+
+
 let play (board, phase) color =
   print_string "Phase: ";
   print_int phase;
@@ -80,13 +101,7 @@ let play (board, phase) color =
   if phase = 4 then
     Mv (6, 5)
   else
-    let ms = valid_moves board color in
-    if ms = [] then
-      Pass
-    else
-      let k = Random.int (List.length ms) in
-      let (i,j) = List.nth ms k in
-      Mv (i,j)
+    search_priority board color
 
 let count board color =
   let s = ref 0 in
