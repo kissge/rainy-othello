@@ -7,8 +7,8 @@ let string_of_move = function
   | Pass   -> "PASS"
   | GiveUp -> "GIVEUP" 
   | Mv (i,j) -> 
-    let ci = char_of_int (i + int_of_char 'A' - 1) in 
-    let cj = char_of_int (j + int_of_char '1' - 1) in 
+    let ci = char_of_int (i + int_of_char 'A') in 
+    let cj = char_of_int (j + int_of_char '1') in 
     let s  = String.make 2 ' ' in 
     let _  = ( s.[0] <- ci; s.[1] <- cj) in 
     s

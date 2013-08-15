@@ -20,8 +20,8 @@ comm:
              else if String.length s = 2 && 'A' <= s.[0] && s.[0] <= 'H' 
                   && '1' <= s.[1] && s.[1] <= '8' then 
                Command.Move 
-                 (Command.Mv (int_of_char s.[0] - int_of_char 'A' + 1, 
-                              int_of_char s.[1] - int_of_char '1' + 1))
+                 (Command.Mv (int_of_char s.[0] - int_of_char 'A', 
+                              int_of_char s.[1] - int_of_char '1'))
              else
                failwith "Invalid Command" }
 | START wb STR INT eoc  { Command.Start ($2,$3,$4) }
