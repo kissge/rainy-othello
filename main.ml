@@ -4,6 +4,7 @@ open Command
 open Play
 open Color
 open Printf
+open Theory
 
 let opt_verbose     = ref false
 let opt_player_name = ref "RAINYv1.0"
@@ -66,6 +67,7 @@ let print_hist x = print_endline (string_of_hist x)
 let result_w = ref 0
 let result_l = ref 0
 let result_t = ref 0
+let history_code = ref ""
 
 let string_of_scores scores =
   let maxlen =
@@ -83,6 +85,7 @@ let rec wait_start (ic,oc) =
       Bye scores ->
         print_scores scores
     | Start (color, oname, mytime) ->
+      history_code := "";
       let board = init_board () in
       if color = black then
         my_move (ic,oc) board color [] oname mytime
@@ -92,7 +95,8 @@ let rec wait_start (ic,oc) =
       failwith "Invalid Command"
 
 and my_move (ic,oc) board color hist oname mytime =
-  let pmove = play board color in
+  let pmove = play !history_code board color in
+  let _ = modify_history history_code pmove in
   let board = doMove board pmove color in
   let _ = output_command oc (Move pmove) in
   let _ = if !opt_verbose then
@@ -110,6 +114,7 @@ and my_move (ic,oc) board color hist oname mytime =
 and op_move (ic,oc) board color hist oname mytime =
   match input_command ic with
     | Move omove ->
+      let _ = modify_history history_code omove in
       let board = doMove board omove (opposite_color color) in
       let _ = if !opt_verbose then
           (print_endline "--------------------------------------------------------------------------------";

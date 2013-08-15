@@ -1,7 +1,7 @@
 open Array
 open Color
 open Command
-
+open Theory
 
 type board = int64 * int64 * int * int
 
@@ -196,14 +196,29 @@ let search_priority board color =
   in
   search priority_list
 
+let search_theory hist board color =
+  let len = String.length hist in
+  let rec search theory =
+    match theory with
+      [] ->
+	print_endline "[EARLY STAGE] No theory found";
+	search_priority board color
+    | t::ts ->
+      if theory_enroute t hist len then
+	( print_endline "[EARLY STAGE] I know theory!";
+	  theory_decode t.[len] )
+      else search ts
+  in search theory_opening
 
-let play board color =
+let play history_code board color =
   let phase = phase board in
   print_string "Phase: ";
   print_int phase;
   print_endline "";
   if phase = 4 then
     Mv (5, 4)
+  else if phase < 32 then
+    search_theory history_code board color
   else if phase > 50 then
     let time_start = Unix.gettimeofday () in
     let result = search_endstage board color in
