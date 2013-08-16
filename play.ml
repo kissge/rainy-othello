@@ -120,55 +120,57 @@ let count (board_b, board_w, count_b, count_w) color =
 
 let phase (board_b, board_w, count_b, count_w) = count_b + count_w
 
-let search_endstage board color =
+let search_alphabeta board color depth evaluator =
   let ocolor = opposite_color color in
-  let rec search_me board endflag alpha beta =
-    match valid_moves board color with
-      [] ->
-	if endflag then
-	  count board color
-	else
-	  search_enemy board true alpha beta
-    | ms ->
+  let rec search_me board endflag alpha beta depth =
+    let ms = valid_moves board color in
+    if ms = [] || depth = 0 then
+      if endflag then
+	evaluator board color
+      else
+	search_enemy board true alpha beta (depth - 1)
+    else
       let rec search ms alpha =
 	match ms with
 	  [] -> alpha
 	| (i, j)::ms -> let nextboard = doMove board (Mv (i, j)) color in
-			let alpha = max alpha (search_enemy nextboard false alpha beta) in
+			let alpha = max alpha (search_enemy nextboard false alpha beta (depth - 1)) in
 			if alpha >= beta then beta else search ms alpha
       in
       search ms alpha
-  and search_enemy board endflag alpha beta =
-    match valid_moves board ocolor with
-      [] ->
-	if endflag then
-	  count board color
-	else
-	  search_me board true alpha beta
-    | ms ->
+  and search_enemy board endflag alpha beta depth =
+    let ms = valid_moves board ocolor in
+    if ms = [] || depth = 0 then
+      if endflag then
+	evaluator board color
+      else
+	search_me board true alpha beta (depth - 1)
+    else
       let rec search ms beta =
 	match ms with
 	  [] -> beta
 	| (i, j)::ms -> let nextboard = doMove board (Mv (i, j)) ocolor in
-			let beta = min beta (search_me nextboard false alpha beta) in
+			let beta = min beta (search_me nextboard false alpha beta (depth - 1)) in
 			if alpha >= beta then alpha else search ms beta
       in
       search ms beta
   in
-  let rec search_firstmove board ms max_s max_hand =
+  let rec search_firstmove board ms max_s max_hand depth =
     match ms with
       [] -> (max_s, max_hand)
     | (i, j)::ms -> let nextboard = doMove board (Mv (i, j)) color in
-		    let try_s = search_enemy nextboard false (-999) 999 in
+		    let try_s = search_enemy nextboard false (-999) 999 (depth - 1) in
 		    if max_s <= try_s then
-		      search_firstmove board ms try_s (Mv (i, j))
+		      search_firstmove board ms try_s (Mv (i, j)) depth
 		    else
-		      search_firstmove board ms max_s max_hand
-  in
+		      search_firstmove board ms max_s max_hand depth
+  in search_firstmove board (valid_moves board color) (-1) Pass depth
+
+let search_endstage board color =
   let vm = valid_moves board color in
   let _ = print_human board color vm in
   print_endline "[END STAGE] Computing all possible moves...";
-  let (max_s, max_hand) = search_firstmove board vm (-1) Pass
+  let (max_s, max_hand) = search_alphabeta board color (-1) count
   in
   print_string "Expectation: ";
   print_int max_s;
