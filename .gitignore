@@ -16,3 +16,7 @@ commandLexer.ml
 commandParser.ml
 commandParser.mli
 *#*
+temp*
+convert
+memo
+theory_*

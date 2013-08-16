@@ -217,15 +217,13 @@ let play history_code board color =
   print_endline "";
   if phase = 4 then
     Mv (5, 4)
-  else if phase < 32 then
-    search_theory history_code board color
   else if phase > 50 then
     let time_start = Unix.gettimeofday () in
     let result = search_endstage board color in
     Printf.printf "%f seconds.\n" (Unix.gettimeofday () -. time_start);
     result
   else
-    search_priority board color
+    search_theory history_code board color
 
 let print_board board =
   print_endline " |A B C D E F G H ";
