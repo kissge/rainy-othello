@@ -123,37 +123,43 @@ let phase (board_b, board_w, count_b, count_w) = count_b + count_w
 let search_alphabeta board color depth evaluator =
   let ocolor = opposite_color color in
   let rec search_me board endflag alpha beta depth =
-    let ms = valid_moves board color in
-    if ms = [] || depth = 0 then
-      if endflag then
-	evaluator board color
-      else
-	search_enemy board true alpha beta (depth - 1)
+    if depth = 0 then
+      evaluator board color
     else
-      let rec search ms alpha =
-	match ms with
-	  [] -> alpha
-	| (i, j)::ms -> let nextboard = doMove board (Mv (i, j)) color in
-			let alpha = max alpha (search_enemy nextboard false alpha beta (depth - 1)) in
-			if alpha >= beta then beta else search ms alpha
-      in
-      search ms alpha
+      let ms = valid_moves board color in
+      if ms = [] then
+	if endflag then
+	  evaluator board color
+	else
+	  search_enemy board true alpha beta (depth - 1)
+      else
+	let rec search ms alpha =
+	  match ms with
+	    [] -> alpha
+	  | (i, j)::ms -> let nextboard = doMove board (Mv (i, j)) color in
+			  let alpha = max alpha (search_enemy nextboard false alpha beta (depth - 1)) in
+			  if alpha >= beta then beta else search ms alpha
+	in
+	search ms alpha
   and search_enemy board endflag alpha beta depth =
-    let ms = valid_moves board ocolor in
-    if ms = [] || depth = 0 then
-      if endflag then
-	evaluator board color
-      else
-	search_me board true alpha beta (depth - 1)
+    if depth = 0 then
+      evaluator board color
     else
-      let rec search ms beta =
-	match ms with
-	  [] -> beta
-	| (i, j)::ms -> let nextboard = doMove board (Mv (i, j)) ocolor in
-			let beta = min beta (search_me nextboard false alpha beta (depth - 1)) in
-			if alpha >= beta then alpha else search ms beta
-      in
-      search ms beta
+      let ms = valid_moves board ocolor in
+      if ms = [] then
+	if endflag then
+	  evaluator board color
+	else
+	  search_me board true alpha beta (depth - 1)
+      else
+	let rec search ms beta =
+	  match ms with
+	    [] -> beta
+	  | (i, j)::ms -> let nextboard = doMove board (Mv (i, j)) ocolor in
+			  let beta = min beta (search_me nextboard false alpha beta (depth - 1)) in
+			  if alpha >= beta then alpha else search ms beta
+	in
+	search ms beta
   in
   let rec search_firstmove board ms max_s max_hand depth =
     match ms with
@@ -164,7 +170,8 @@ let search_alphabeta board color depth evaluator =
 		      search_firstmove board ms try_s (Mv (i, j)) depth
 		    else
 		      search_firstmove board ms max_s max_hand depth
-  in search_firstmove board (valid_moves board color) (-1) Pass depth
+  in
+  search_firstmove board (valid_moves board color) (-999) Pass depth
 
 let search_endstage board color =
   let vm = valid_moves board color in
@@ -204,28 +211,45 @@ let search_theory hist board color =
     match theory with
       [] ->
 	print_endline "[EARLY STAGE] No theory found";
-	search_priority board color
+	None
     | t::ts ->
       if theory_enroute t hist len then
 	( print_endline "[EARLY STAGE] I know theory!";
-	  theory_decode t.[len] )
+	  Some (theory_decode t.[len]) )
       else search ts
   in search theory_opening
+
+let rec pow x y = if y = 0 then 1 else x * pow x (y - 1)
+
+let search_middlestage phase board color =
+  let vm = valid_moves board color in
+  let _ = print_human board color vm in
+  print_endline "[MIDDLE STAGE] Trying some of possible future...";
+  let (_, max_hand) = search_alphabeta board color (pow 2 (phase / 20 + 1))
+    ( if phase < 40 then
+	fun b c -> let ev = count b c in if ev = 0 then -999 else -ev
+      else
+	count )
+  in max_hand
 
 let play history_code board color =
   let phase = phase board in
   print_string "Phase: ";
   print_int phase;
   print_endline "";
-  if phase = 4 then
-    Mv (5, 4)
-  else if phase > 50 then
-    let time_start = Unix.gettimeofday () in
-    let result = search_endstage board color in
-    Printf.printf "%f seconds.\n" (Unix.gettimeofday () -. time_start);
-    result
-  else
-    search_theory history_code board color
+  let time_start = Unix.gettimeofday () in
+  let result = 
+    if phase = 4 then
+      Mv (5, 4)
+    else if phase > 50 then
+      search_endstage board color
+    else
+      match search_theory history_code board color with
+	None -> search_middlestage phase board color
+      | Some mv -> mv
+  in
+  Printf.printf "%f seconds.\n" (Unix.gettimeofday () -. time_start);
+  result
 
 let print_board board =
   print_endline " |A B C D E F G H ";
