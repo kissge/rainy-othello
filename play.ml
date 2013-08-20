@@ -84,18 +84,18 @@ let doMove board com color =
 let mix xs ys =
   List.concat (List.map (fun x -> List.map (fun y -> (x,y)) ys) xs)
 
-
-let valid_moves board color =
+let all_pos =
   let ls = [0;1;2;3;4;5;6;7] in
-  List.filter (is_valid_move board color)
-    (mix ls ls)
+  mix ls ls
+
+let valid_moves board color = List.filter (is_valid_move board color) all_pos
 
 
 let print_human board color valid_moves =
   let counter = ref 1 in
   let moves_sorted = ref [] in
   (* print_string "\x1b[2J"; *)
-  for j = 0 to 7 do 
+  for j = 0 to 7 do
     for i = 0 to 7 do
       if List.mem (i, j) valid_moves then
 	( if color = white then Printf.printf "\x1b[37;46m%2x\x1b[m" !counter
@@ -124,12 +124,12 @@ let search_alphabeta board color depth evaluator =
   let ocolor = opposite_color color in
   let rec search_me board endflag alpha beta depth =
     if depth = 0 then
-      evaluator board color
+      evaluator color board color
     else
       let ms = valid_moves board color in
       if ms = [] then
 	if endflag then
-	  evaluator board color
+	  evaluator none board color
 	else
 	  search_enemy board true alpha beta (depth - 1)
       else
@@ -143,12 +143,12 @@ let search_alphabeta board color depth evaluator =
 	search ms alpha
   and search_enemy board endflag alpha beta depth =
     if depth = 0 then
-      evaluator board color
+      evaluator ocolor board color
     else
       let ms = valid_moves board ocolor in
       if ms = [] then
 	if endflag then
-	  evaluator board color
+	  evaluator none board color
 	else
 	  search_me board true alpha beta (depth - 1)
       else
@@ -165,45 +165,24 @@ let search_alphabeta board color depth evaluator =
     match ms with
       [] -> (max_s, max_hand)
     | (i, j)::ms -> let nextboard = doMove board (Mv (i, j)) color in
-		    let try_s = search_enemy nextboard false (-999) 999 (depth - 1) in
+		    let try_s = search_enemy nextboard false (-99999) 99999 (depth - 1) in
 		    if max_s <= try_s then
 		      search_firstmove board ms try_s (Mv (i, j)) depth
 		    else
 		      search_firstmove board ms max_s max_hand depth
   in
-  search_firstmove board (valid_moves board color) (-999) Pass depth
+  search_firstmove board (valid_moves board color) (-99999) Pass depth
 
 let search_endstage board color =
   let vm = valid_moves board color in
   let _ = print_human board color vm in
   print_endline "[END STAGE] Computing all possible moves...";
-  let (max_s, max_hand) = search_alphabeta board color (-1) count
+  let (max_s, max_hand) = search_alphabeta board color (-1) (fun _ -> count)
   in
   print_string "Expectation: ";
   print_int max_s;
   print_endline "";
   max_hand
-
-
-let search_priority board color =
-  let priority_list =
-    [
-      (0,0);(0,7);(7,0);(7,7);
-      (0,2);(2,0);(0,5);(5,0);(2,7);(7,2);(5,7);(7,5);
-      (2,2);(2,5);(5,2);(5,5);
-      (0,3);(0,4);(3,0);(4,0);(3,7);(4,7);(7,3);(7,4);
-      (2,3);(2,4);(3,2);(4,2);(3,4);(3,5);(4,3);(5,3);
-      (1,2);(1,3);(1,4);(1,5);(2,1);(3,1);(4,1);(5,1);(2,6);(3,6);(4,6);(5,6);(6,2);(6,3);(6,4);(6,5);
-      (0,1);(1,0);(0,6);(1,7);(6,0);(7,1);(6,7);(7,6);
-      (1,1);(1,6);(6,1);(6,6)
-    ] in
-  let rec search move =
-    match move with (i, j)::ms ->
-      if is_valid_move board color (i, j) then Mv (i, j)
-      else search ms
-    | [] -> Pass
-  in
-  search priority_list
 
 let search_theory hist board color =
   let len = String.length hist in
@@ -221,16 +200,102 @@ let search_theory hist board color =
 
 let rec pow x y = if y = 0 then 1 else x * pow x (y - 1)
 
+let get_bit (s, n) (i, j) =
+  let n = i + j * 8 in
+  let n_bit = Int64.shift_right_logical Int64.min_int n in
+  Int64.logand s n_bit <> Int64.zero
+
+let set_bit (s, num) (i, j) =
+  let n = i + j * 8 in
+  let n_bit = Int64.shift_right_logical Int64.min_int n in
+  if Int64.logand s n_bit <> Int64.zero then (s, num)
+  else (Int64.logor s n_bit, num + 1)
+
+let count_stable board color =
+  let phase1 s =
+    let rec along_edge (i, j) (di, dj) s =
+      if valid_coordinates (i, j) && get_color board (i, j) = color then
+	along_edge (i + di, j + dj) (di, dj) (set_bit s (i, j))
+      else
+	s
+    in
+    let s = along_edge (0, 0) (1, 0) s in
+    let s = along_edge (0, 0) (0, 1) s in
+    let s = along_edge (0, 7) (1, 0) s in
+    let s = along_edge (0, 7) (0, -1) s in
+    let s = along_edge (7, 0) (-1, 0) s in
+    let s = along_edge (7, 0) (0, 1) s in
+    let s = along_edge (7, 7) (-1, 0) s in
+    let s = along_edge (7, 7) (0, -1) s in
+    s
+  in
+  let phase2 s =
+    let rec filled l = match l with [] -> true | car::cdr -> get_color board car <> none && filled cdr in
+    let rec allstableandmycolor s l = match l with [] -> true | car::cdr -> get_color board car = color && get_bit s car && allstableandmycolor s cdr in
+    let check_row s (r1, r2) = (filled r1 && filled r2) || (allstableandmycolor s r1 && filled r2) || (filled r1 && allstableandmycolor s r2) in
+    let make_row (i, j) (di, dj) =
+      let rec f (i, j) (di, dj) = if valid_coordinates (i, j) then (i, j) :: f (i + di, j + dj) (di, dj) else [] in
+      (f (i - di, j - dj) (-di, -dj), f (i + di, j + dj) (di, dj)) in
+    let check s pos = check_row s (make_row pos (1, -1)) && check_row s (make_row pos (1, 0)) && check_row s (make_row pos (1, 1)) && check_row s (make_row pos (0, 1)) in
+    let rec phase2' s n =
+      if n = 64 then s
+      else let pos = (n / 8, n mod 8) in
+	   phase2' (if check s pos then (set_bit s pos) else s) (n + 1)
+    in phase2' s 0
+  in
+  let (_, s) = phase2 (phase2 (phase2 (phase1 (0L, 0)))) in s
+
+let evaluator_position board color =
+  let scoretable = [-1; -3; -1; 0; 0; -1; -3; -1;
+		    4; -1; 2; -1; -1; 2; -1; 4;
+		    -11; -16; -1; -3; -3; -1; -16; -11;
+		    45; -11; 4; -1; -1; 4; -11; 45] in
+  let scoretable = List.rev_append scoretable scoretable in
+  let rec iter st n =
+    match st with
+      [] -> 0
+    | s::st ->
+      let (i, j) = (n / 8, n mod 8) in
+      let c = get_color board (i, j) in
+      (if c = color then 1 else if c = none then 0 else -1) * s + iter st (n + 1)
+  in
+  iter scoretable 0
+
+let evaluator_middlestage next board color =
+  let ocolor = opposite_color color in
+  let mycount = count board color in
+  let opcount = count board ocolor in
+  if next = none then
+    if mycount > opcount then
+      10000 + mycount - opcount
+    else
+      if mycount = opcount then
+	0
+      else
+	-10000 + mycount - opcount
+  else
+    let mypossibility = List.length (valid_moves board color) in
+    let oppossibility = List.length (valid_moves board ocolor) in
+    let mystable = count_stable board color in
+    let opstable = count_stable board ocolor in
+    evaluator_position board color
+    + (mystable - opstable) * 60
+    + (mypossibility - oppossibility) * 70
+
+
 let search_middlestage phase board color =
   let vm = valid_moves board color in
   let _ = print_human board color vm in
-  print_endline "[MIDDLE STAGE] Trying some of possible future...";
-  let (_, max_hand) = search_alphabeta board color (pow 2 (phase / 20 + 1))
-    ( if phase < 40 then
-	fun b c -> let ev = count b c in if ev = 0 then -999 else -ev
-      else
-	count )
-  in max_hand
+  let depth = phase / 20 + 3 in
+  print_string "[MIDDLE STAGE] Trying some of possible future (depth: ";
+  print_int depth;
+  print_endline ") ...";
+  let (max_evaluation, max_hand) = search_alphabeta board color depth evaluator_middlestage
+  in
+  print_string "Evaluation: ";
+  print_int max_evaluation;
+  print_endline "";
+  max_hand
 
 let play history_code board color =
   let phase = phase board in
@@ -238,10 +303,10 @@ let play history_code board color =
   print_int phase;
   print_endline "";
   let time_start = Unix.gettimeofday () in
-  let result = 
+  let result =
     if phase = 4 then
       Mv (5, 4)
-    else if phase > 50 then
+    else if phase > 49 then
       search_endstage board color
     else
       match search_theory history_code board color with
