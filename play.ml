@@ -120,7 +120,7 @@ let count (board_b, board_w, count_b, count_w) color =
 
 let phase (board_b, board_w, count_b, count_w) = count_b + count_w
 
-let search_alphabeta board color depth evaluator =
+let search_alphabeta board color depth evaluator cut =
   let ocolor = opposite_color color in
   let rec search_me board endflag alpha beta depth =
     if depth = 0 then
@@ -167,17 +167,20 @@ let search_alphabeta board color depth evaluator =
     | (i, j)::ms -> let nextboard = doMove board (Mv (i, j)) color in
 		    let try_s = search_enemy nextboard false (-99999) 99999 (depth - 1) in
 		    if max_s <= try_s then
-		      search_firstmove board ms try_s (Mv (i, j)) depth
+		      if try_s < cut then
+			search_firstmove board ms try_s (Mv (i, j)) depth
+		      else
+			(try_s, Mv (i, j))
 		    else
 		      search_firstmove board ms max_s max_hand depth
   in
   search_firstmove board (valid_moves board color) (-99999) Pass depth
 
-let search_endstage board color =
+let search_endstage board color refresh cut =
   let vm = valid_moves board color in
   let _ = print_human board color vm in
   print_endline "[END STAGE] Computing all possible moves...";
-  let (max_s, max_hand) = search_alphabeta board color (-1) (fun _ -> count)
+  let (max_s, max_hand) = search_alphabeta board color (-1) (fun _ -> refresh (); count) cut
   in
   print_string "Expectation: ";
   print_int max_s;
@@ -261,7 +264,8 @@ let evaluator_position board color =
   in
   iter scoretable 0
 
-let evaluator_middlestage next board color =
+let evaluator_middlestage refresh next board color =
+  refresh ();
   let ocolor = opposite_color color in
   let mycount = count board color in
   let opcount = count board ocolor in
@@ -283,21 +287,21 @@ let evaluator_middlestage next board color =
     + (mypossibility - oppossibility) * 70
 
 
-let search_middlestage phase board color =
+let search_middlestage phase board color refresh =
   let vm = valid_moves board color in
   let _ = print_human board color vm in
-  let depth = phase / 20 + 3 in
+  let depth = phase / 25 + 2 in
   print_string "[MIDDLE STAGE] Trying some of possible future (depth: ";
   print_int depth;
   print_endline ") ...";
-  let (max_evaluation, max_hand) = search_alphabeta board color depth evaluator_middlestage
+  let (max_evaluation, max_hand) = search_alphabeta board color depth (evaluator_middlestage refresh) 99999999
   in
   print_string "Evaluation: ";
   print_int max_evaluation;
   print_endline "";
   max_hand
 
-let play history_code board color =
+let play history_code board color refresh =
   let phase = phase board in
   print_string "Phase: ";
   print_int phase;
@@ -307,10 +311,10 @@ let play history_code board color =
     if phase = 4 then
       Mv (5, 4)
     else if phase > 49 then
-      search_endstage board color
+      search_endstage board color refresh 33
     else
       match search_theory history_code board color with
-	None -> search_middlestage phase board color
+	None -> search_middlestage phase board color refresh
       | Some mv -> mv
   in
   Printf.printf "%f seconds.\n" (Unix.gettimeofday () -. time_start);

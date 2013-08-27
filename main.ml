@@ -10,15 +10,17 @@ let opt_verbose     = ref false
 let opt_player_name = ref "RAINYv1.0"
 let opt_port        = ref 3000
 let opt_host        = ref "localhost"
+let timeout         = ref (-1)
 
 let options =
-  [("-H", Arg.Set_string opt_host, "host name");
+  [("-t", Arg.Set_int    timeout, "timeout [sec] (adjust with server setting)");
+   ("-H", Arg.Set_string opt_host, "host name");
    ("-p", Arg.Set_int    opt_port, "port number");
    ("-n", Arg.Set_string opt_player_name, "player name");
    ("-v", Arg.Set        opt_verbose, "verbose mode")]
 
 let usage_msg =
-  "Usage:\n\treversi -H HOST -p PORT -n PLAYERNAME...\n"
+  "Usage:\n\treversi -t TIMEOUT -H HOST -p PORT -n PLAYERNAME...\n"
 
 let input_color ic =
   let s = input_line ic in
@@ -28,6 +30,15 @@ let input_color ic =
 let output_color oc color =
   if color = white then (output_string oc "white\n"; flush oc)
   else                  (output_string oc "black\n"; flush oc)
+
+let refresh_count = ref 0.0
+
+let refresh_connection oc _ =
+  let t = Unix.gettimeofday () in
+  if t -. !refresh_count > (float_of_int !timeout) *. 0.8 then
+    ( refresh_count := t;
+      output_string oc "\n";
+      flush oc )
 
 let input_command ic =
   let s = input_line ic in
@@ -95,7 +106,7 @@ let rec wait_start (ic,oc) =
       failwith "Invalid Command"
 
 and my_move (ic,oc) board color hist oname mytime =
-  let pmove = play !history_code board color in
+  let pmove = play !history_code board color (refresh_connection oc) in
   let _ = modify_history history_code pmove in
   let board = doMove board pmove color in
   let _ = output_command oc (Move pmove) in
@@ -152,6 +163,10 @@ let client host port =
 let main () =
   let _ = Random.self_init () in
   let _ = Arg.parse options (fun _ -> ()) usage_msg in
+  if !timeout = -1 then
+    ( print_endline "[!] Please specify the timeout duration with -t option (Using default value, 3 seconds).";
+      print_endline "    This value must be equal to the server setting.";
+      timeout := 3 );
   let (host,port) = (!opt_host, !opt_port) in
     client host port
 
