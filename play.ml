@@ -19,58 +19,38 @@ let get_color (board_b, board_w, count_b, count_w) (i, j) =
   else
     none
 
-let set_color (board_b, board_w, count_b, count_w) (i, j) color =
-  (* Assert 0 <= i, j <= 7 *)
-  let n = i + j * 8 in
-  let n_bit = Int64.shift_right_logical Int64.min_int n in
-  let n_bit' = Int64.lognot n_bit in
-  let previous = get_color (board_b, board_w, count_b, count_w) (i, j) in
-  let count_b = if previous <> black && color = black then count_b + 1
-    else if previous = black && color <> black then count_b - 1
-    else count_b
-  in
-  let count_w = if previous <> white && color = white then count_w + 1
-    else if previous = white && color <> white then count_w - 1
-    else count_w
-  in
-  if color = black then
-    (Int64.logor board_b n_bit, Int64.logand board_w n_bit', count_b, count_w)
-  else if color = white then
-    (Int64.logand board_b n_bit', Int64.logor board_w n_bit, count_b, count_w)
-  else
-    (Int64.logand board_b n_bit', Int64.logand board_w n_bit', count_b, count_w)
-
-let dirs = [ (-1,-1); (0,-1); (1,-1); (-1,0); (1,0); (-1,1); (0,1); (1,1) ]
-
 let valid_coordinates (i, j) = 0 <= i && i <= 7 && 0 <= j && j <= 7
 
-let flippable_indices_line board color (di,dj) (i,j) =
-  let ocolor = opposite_color color in
-  let rec f (di,dj) (i,j) r =
-    if valid_coordinates (i, j) && get_color board (i, j) = ocolor then
-      g (di,dj) (i+di,j+dj) ( (i,j) :: r )
-    else
-      []
-  and    g (di,dj) (i,j) r =
-    if valid_coordinates (i, j) && get_color board (i, j) = ocolor then
-      g (di,dj) (i+di,j+dj) ( (i,j) :: r )
-    else if valid_coordinates (i, j) && get_color board (i, j) = color then
-      r
-    else
-      [] in
-  f (di,dj) (i,j) []
+let flip (board_b, board_w, count_b, count_w) color n =
+  let board_me = if color = black then board_b else board_w in
+  let board_op = if color = white then board_b else board_w in
+  let n_bit = Int64.shift_right_logical Int64.min_int n in
+  let flip' shifter mask =
+    let w = if mask then Int64.logand board_op 9114861777597660798L else board_op in
+    let t = Int64.logand w (shifter n_bit) in
+    let t = Int64.logor t (Int64.logand w (shifter t)) in
+    let t = Int64.logor t (Int64.logand w (shifter t)) in
+    let t = Int64.logor t (Int64.logand w (shifter t)) in
+    let t = Int64.logor t (Int64.logand w (shifter t)) in
+    let t = Int64.logor t (Int64.logand w (shifter t)) in
+    if Int64.logand board_me (shifter t) <> 0L then t else 0L
+  in
+  let flipboard = List.fold_left2 (fun b s m -> Int64.logor b (flip' s m)) 0L
+    [(fun n -> Int64.shift_left n 9); (fun n -> Int64.shift_left n 8); (fun n -> Int64.shift_left n 7); (fun n -> Int64.shift_left n 1);
+     (fun n -> Int64.shift_right_logical n 1); (fun n -> Int64.shift_right_logical n 7); (fun n -> Int64.shift_right_logical n 8); (fun n -> Int64.shift_right_logical n 9)] [true;false;true;true;true;true;false;true] in
+  let rec count' b n cnt = if n < 0 then cnt else count' (Int64.shift_right_logical b 1) (n - 1) (if Int64.logand b 1L <> 0L then cnt + 1 else cnt) in
+  (Int64.logor n_bit flipboard, count' flipboard 63 0)
 
-let flippable_indices board color (i,j) =
-  let bs = List.map (fun (di,dj) -> flippable_indices_line board color (di,dj) (i+di,j+dj)) dirs in
-  List.concat bs
-
-let doMove board com color =
+let doMove (board_b, board_w, count_b, count_w) com color =
   match com with
-    GiveUp  -> board
-  | Pass    -> board
+    GiveUp  -> (board_b, board_w, count_b, count_w)
+  | Pass    -> (board_b, board_w, count_b, count_w)
   | Mv (i,j) ->
-    let ms = (i, j) :: flippable_indices board color (i,j) in
-    List.fold_left (fun b p -> set_color b p color) board ms
+    let (f, n) = flip (board_b, board_w, count_b, count_w) color (i + j * 8) in
+    if color = black then
+      (Int64.logor board_b f, Int64.logand board_w (Int64.lognot f), count_b + 1 + n, count_w - n)
+    else
+      (Int64.logand board_b (Int64.lognot f), Int64.logor board_w f, count_b - n, count_w + 1 + n)
 
 let valid_moves (board_b, board_w, count_b, count_w) color =
   let board_me = if color = black then board_b else board_w in
@@ -88,7 +68,7 @@ let valid_moves (board_b, board_w, count_b, count_w) color =
   in
   let rec board2list b n l =
     if n < 0 then l
-    else board2list (Int64.shift_right_logical b 1) (n - 1) (if Int64.logand b 1L <> 0L then (n mod 8, n / 8) :: l else l)
+    else board2list (Int64.shift_right_logical b 1) (n - 1) (if Int64.logand b 1L <> 0L then n :: l else l)
   in
   board2list (Int64.logand blank (List.fold_left2 (fun b s m -> Int64.logor b (valid_moves' s m)) 0L
   				    [(fun n -> Int64.shift_left n 9); (fun n -> Int64.shift_left n 8); (fun n -> Int64.shift_left n 7); (fun n -> Int64.shift_left n 1);
@@ -101,7 +81,7 @@ let print_human board color valid_moves =
   (* print_string "\x1b[2J"; *)
   for j = 0 to 7 do
     for i = 0 to 7 do
-      if List.mem (i, j) valid_moves then
+      if List.mem (i + j * 8) valid_moves then
 	( if color = white then Printf.printf "\x1b[37;46m%2x\x1b[m" !counter
 	  else                  Printf.printf "\x1b[30;46m%2x\x1b[m" !counter ;
 	  moves_sorted := (i, j) :: !moves_sorted;
@@ -140,9 +120,9 @@ let search_alphabeta board color depth evaluator cut =
 	let rec search ms alpha =
 	  match ms with
 	    [] -> alpha
-	  | (i, j)::ms -> let nextboard = doMove board (Mv (i, j)) color in
-			  let alpha = max alpha (search_enemy nextboard false alpha beta (depth - 1)) in
-			  if alpha >= beta then beta else search ms alpha
+	  | n::ms -> let nextboard = doMove board (Mv (n mod 8, n / 8)) color in
+		     let alpha = max alpha (search_enemy nextboard false alpha beta (depth - 1)) in
+		     if alpha >= beta then beta else search ms alpha
 	in
 	search ms alpha
   and search_enemy board endflag alpha beta depth =
@@ -159,24 +139,24 @@ let search_alphabeta board color depth evaluator cut =
 	let rec search ms beta =
 	  match ms with
 	    [] -> beta
-	  | (i, j)::ms -> let nextboard = doMove board (Mv (i, j)) ocolor in
-			  let beta = min beta (search_me nextboard false alpha beta (depth - 1)) in
-			  if alpha >= beta then alpha else search ms beta
+	  | n::ms -> let nextboard = doMove board (Mv (n mod 8, n / 8)) ocolor in
+		     let beta = min beta (search_me nextboard false alpha beta (depth - 1)) in
+		     if alpha >= beta then alpha else search ms beta
 	in
 	search ms beta
   in
   let rec search_firstmove board ms max_s max_hand depth =
     match ms with
       [] -> (max_s, max_hand)
-    | (i, j)::ms -> let nextboard = doMove board (Mv (i, j)) color in
-		    let try_s = search_enemy nextboard false (-99999) 99999 (depth - 1) in
-		    if max_s <= try_s then
-		      if try_s < cut then
-			search_firstmove board ms try_s (Mv (i, j)) depth
-		      else
-			(try_s, Mv (i, j))
-		    else
-		      search_firstmove board ms max_s max_hand depth
+    | n::ms -> let nextboard = doMove board (Mv (n mod 8, n / 8)) color in
+	       let try_s = search_enemy nextboard false (-99999) 99999 (depth - 1) in
+	       if max_s <= try_s then
+		 if try_s < cut then
+		   search_firstmove board ms try_s (Mv (n mod 8, n / 8)) depth
+		 else
+		   (try_s, Mv (n mod 8, n / 8))
+	       else
+		 search_firstmove board ms max_s max_hand depth
   in
   search_firstmove board (valid_moves board color) (-99999) Pass depth
 
@@ -328,7 +308,7 @@ let play history_code board color refresh =
   let result =
     if phase = 4 then
       Mv (5, 4)
-    else if phase > 49 then
+    else if phase > 47 then
       search_endstage board color refresh 33
     else if phase > 44 then
       search_midendstage board color refresh
