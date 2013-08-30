@@ -251,9 +251,9 @@ let evaluator_position board color =
 let evaluator_middlestage refresh next board color =
   refresh ();
   let ocolor = opposite_color color in
-  let mycount = count board color in
-  let opcount = count board ocolor in
   if next = none then
+    let mycount = count board color in
+    let opcount = count board ocolor in
     if mycount > opcount then
       10000 + mycount - opcount
     else
@@ -262,13 +262,9 @@ let evaluator_middlestage refresh next board color =
       else
 	-10000 + mycount - opcount
   else
-    let mypossibility = List.length (valid_moves board color) in
-    let oppossibility = List.length (valid_moves board ocolor) in
     let mystable = count_stable board color in
     let opstable = count_stable board ocolor in
-    evaluator_position board color
-    + (mystable - opstable) * 150
-    + (mypossibility - oppossibility) * 70
+    mystable - opstable
 
 
 let search_middlestage phase board color refresh =
