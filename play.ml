@@ -64,15 +64,6 @@ let flippable_indices board color (i,j) =
   let bs = List.map (fun (di,dj) -> flippable_indices_line board color (di,dj) (i+di,j+dj)) dirs in
   List.concat bs
 
-let is_effective board color (i,j) =
-  match flippable_indices board color (i,j) with
-    [] -> false
-  | _  -> true
-
-let is_valid_move board color (i,j) =
-  (get_color board (i, j) = none) && is_effective board color (i,j)
-
-
 let doMove board com color =
   match com with
     GiveUp  -> board
@@ -81,14 +72,27 @@ let doMove board com color =
     let ms = (i, j) :: flippable_indices board color (i,j) in
     List.fold_left (fun b p -> set_color b p color) board ms
 
-let mix xs ys =
-  List.concat (List.map (fun x -> List.map (fun y -> (x,y)) ys) xs)
-
-let all_pos =
-  let ls = [0;1;2;3;4;5;6;7] in
-  mix ls ls
-
-let valid_moves board color = List.filter (is_valid_move board color) all_pos
+let valid_moves (board_b, board_w, count_b, count_w) color =
+  let board_me = if color = black then board_b else board_w in
+  let board_op = if color = white then board_b else board_w in
+  let blank = Int64.lognot (Int64.logor board_b board_w) in
+  let valid_moves' shifter mask =
+    let w = if mask then Int64.logand board_op 9114861777597660798L else board_op in
+    let t = Int64.logand w (shifter board_me) in
+    let t = Int64.logor t (Int64.logand w (shifter t)) in
+    let t = Int64.logor t (Int64.logand w (shifter t)) in
+    let t = Int64.logor t (Int64.logand w (shifter t)) in
+    let t = Int64.logor t (Int64.logand w (shifter t)) in
+    let t = Int64.logor t (Int64.logand w (shifter t)) in
+    shifter t
+  in
+  let rec board2list b n l =
+    if n < 0 then l
+    else board2list (Int64.shift_right_logical b 1) (n - 1) (if Int64.logand b 1L <> 0L then (n mod 8, n / 8) :: l else l)
+  in
+  board2list (Int64.logand blank (List.fold_left2 (fun b s m -> Int64.logor b (valid_moves' s m)) 0L
+  				    [(fun n -> Int64.shift_left n 9); (fun n -> Int64.shift_left n 8); (fun n -> Int64.shift_left n 7); (fun n -> Int64.shift_left n 1);
+  				     (fun n -> Int64.shift_right_logical n 1); (fun n -> Int64.shift_right_logical n 7); (fun n -> Int64.shift_right_logical n 8); (fun n -> Int64.shift_right_logical n 9)] [true;false;true;true;true;true;false;true])) 63 []
 
 
 let print_human board color valid_moves =
@@ -242,7 +246,7 @@ let count_stable board color =
     let check s pos = check_row s (make_row pos (1, -1)) && check_row s (make_row pos (1, 0)) && check_row s (make_row pos (1, 1)) && check_row s (make_row pos (0, 1)) in
     let rec phase2' s n =
       if n = 64 then s
-      else let pos = (n / 8, n mod 8) in
+      else let pos = (n mod 8, n / 8) in
 	   phase2' (if check s pos then (set_bit s pos) else s) (n + 1)
     in phase2' s 0
   in
@@ -258,7 +262,7 @@ let evaluator_position board color =
     match st with
       [] -> 0
     | s::st ->
-      let (i, j) = (n / 8, n mod 8) in
+      let (i, j) = (n mod 8, n / 8) in
       let c = get_color board (i, j) in
       (if c = color then 1 else if c = none then 0 else -1) * s + iter st (n + 1)
   in
@@ -283,18 +287,32 @@ let evaluator_middlestage refresh next board color =
     let mystable = count_stable board color in
     let opstable = count_stable board ocolor in
     evaluator_position board color
-    + (mystable - opstable) * 60
+    + (mystable - opstable) * 150
     + (mypossibility - oppossibility) * 70
 
 
 let search_middlestage phase board color refresh =
   let vm = valid_moves board color in
   let _ = print_human board color vm in
-  let depth = phase / 25 + 2 in
+  let depth = phase / 25 + 3 in
   print_string "[MIDDLE STAGE] Trying some of possible future (depth: ";
   print_int depth;
   print_endline ") ...";
   let (max_evaluation, max_hand) = search_alphabeta board color depth (evaluator_middlestage refresh) 99999999
+  in
+  print_string "Evaluation: ";
+  print_int max_evaluation;
+  print_endline "";
+  max_hand
+
+let search_midendstage board color refresh =
+  let vm = valid_moves board color in
+  let _ = print_human board color vm in
+  let depth = 10 in
+  print_string "[MID-END STAGE] Trying some of possible future (depth: ";
+  print_int depth;
+  print_endline ") ...";
+  let (max_evaluation, max_hand) = search_alphabeta board color depth (fun _ -> refresh (); count) 50
   in
   print_string "Evaluation: ";
   print_int max_evaluation;
@@ -312,6 +330,8 @@ let play history_code board color refresh =
       Mv (5, 4)
     else if phase > 49 then
       search_endstage board color refresh 33
+    else if phase > 44 then
+      search_midendstage board color refresh
     else
       match search_theory history_code board color with
 	None -> search_middlestage phase board color refresh

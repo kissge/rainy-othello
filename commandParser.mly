@@ -27,6 +27,7 @@ comm:
 | START wb STR INT eoc  { Command.Start ($2,$3,$4) }
 | ACK   INT eoc         { Command.Ack   $2 }
 | BYE   scores eoc      { Command.Bye   $2 }
+| BYE eoc               { Command.Bye [("", 0)] }
 | eoc                   { Command.Empty }
 ;
                

@@ -7,7 +7,7 @@ open Printf
 open Theory
 
 let opt_verbose     = ref false
-let opt_player_name = ref "RAINYv1.0"
+let opt_player_name = ref "rainy1.2"
 let opt_port        = ref 3000
 let opt_host        = ref "localhost"
 let timeout         = ref (-1)
@@ -161,10 +161,9 @@ let client host port =
   wait_start (ic,oc)
 
 let main () =
-  let _ = Random.self_init () in
   let _ = Arg.parse options (fun _ -> ()) usage_msg in
   if !timeout = -1 then
-    ( print_endline "[!] Please specify the timeout duration with -t option (Using default value, 3 seconds).";
+    ( print_endline "[!] Please specify the timeout duration [sec] with -t option (Using default value, 3 seconds).";
       print_endline "    This value must be equal to the server setting.";
       timeout := 3 );
   let (host,port) = (!opt_host, !opt_port) in
