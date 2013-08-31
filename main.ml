@@ -7,7 +7,7 @@ open Printf
 open Theory
 
 let opt_verbose     = ref false
-let opt_player_name = ref "rainy1.2"
+let opt_player_name = ref "rainy1.3"
 let opt_port        = ref 3000
 let opt_host        = ref "localhost"
 let timeout         = ref (-1)

@@ -5,8 +5,17 @@ open Theory
 
 type board = int64 * int64 * int * int
 
-let init_board () =
+let init_board () : board =
   (34628173824L, 68853694464L, 2, 2)
+
+let popcnt (b : int64) =
+  let rec popcnt' b cnt =
+    if b = 0L then
+      cnt
+    else
+      popcnt' (Int64.shift_right_logical b 1) (if Int64.logand b 1L <> 0L then cnt + 1 else cnt)
+  in
+  popcnt' b 0
 
 let get_color (board_b, board_w, count_b, count_w) (i, j) =
   (* Assert 0 <= i, j <= 7 *)
@@ -18,8 +27,6 @@ let get_color (board_b, board_w, count_b, count_w) (i, j) =
     white
   else
     none
-
-let valid_coordinates (i, j) = 0 <= i && i <= 7 && 0 <= j && j <= 7
 
 let flip (board_b, board_w, count_b, count_w) color n =
   let board_me = if color = black then board_b else board_w in
@@ -38,14 +45,13 @@ let flip (board_b, board_w, count_b, count_w) color n =
   let flipboard = List.fold_left2 (fun b s m -> Int64.logor b (flip' s m)) 0L
     [(fun n -> Int64.shift_left n 9); (fun n -> Int64.shift_left n 8); (fun n -> Int64.shift_left n 7); (fun n -> Int64.shift_left n 1);
      (fun n -> Int64.shift_right_logical n 1); (fun n -> Int64.shift_right_logical n 7); (fun n -> Int64.shift_right_logical n 8); (fun n -> Int64.shift_right_logical n 9)] [true;false;true;true;true;true;false;true] in
-  let rec count' b n cnt = if n < 0 then cnt else count' (Int64.shift_right_logical b 1) (n - 1) (if Int64.logand b 1L <> 0L then cnt + 1 else cnt) in
-  (Int64.logor n_bit flipboard, count' flipboard 63 0)
+  (Int64.logor n_bit flipboard, popcnt flipboard)
 
 let doMove (board_b, board_w, count_b, count_w) com color =
   match com with
     GiveUp  -> (board_b, board_w, count_b, count_w)
   | Pass    -> (board_b, board_w, count_b, count_w)
-  | Mv (i,j) ->
+  | Mv (i, j) ->
     let (f, n) = flip (board_b, board_w, count_b, count_w) color (i + j * 8) in
     if color = black then
       (Int64.logor board_b f, Int64.logand board_w (Int64.lognot f), count_b + 1 + n, count_w - n)
@@ -77,14 +83,12 @@ let valid_moves (board_b, board_w, count_b, count_w) color =
 
 let print_human board color valid_moves =
   let counter = ref 1 in
-  let moves_sorted = ref [] in
   (* print_string "\x1b[2J"; *)
   for j = 0 to 7 do
     for i = 0 to 7 do
       if List.mem (i + j * 8) valid_moves then
 	( if color = white then Printf.printf "\x1b[37;46m%2x\x1b[m" !counter
 	  else                  Printf.printf "\x1b[30;46m%2x\x1b[m" !counter ;
-	  moves_sorted := (i, j) :: !moves_sorted;
 	  counter := !counter + 1 )
       else
 	let c = get_color board (i, j) in
@@ -93,14 +97,11 @@ let print_human board color valid_moves =
 	else print_string "\x1b[01;33;42m+ \x1b[m"
     done;
     print_endline ""
-  done;
-  !moves_sorted
+  done
 
 
 let count (board_b, board_w, count_b, count_w) color =
-  if color = black then count_b
-  else if color = white then count_w
-  else 64 - count_b - count_w
+  if color = black then count_b else count_w
 
 let phase (board_b, board_w, count_b, count_w) = count_b + count_w
 
@@ -185,52 +186,51 @@ let search_theory hist board color =
       else search ts
   in search theory_opening
 
-let rec pow x y = if y = 0 then 1 else x * pow x (y - 1)
-
-let get_bit (s, n) (i, j) =
-  let n = i + j * 8 in
-  let n_bit = Int64.shift_right_logical Int64.min_int n in
-  Int64.logand s n_bit <> Int64.zero
-
-let set_bit (s, num) (i, j) =
-  let n = i + j * 8 in
-  let n_bit = Int64.shift_right_logical Int64.min_int n in
-  if Int64.logand s n_bit <> Int64.zero then (s, num)
-  else (Int64.logor s n_bit, num + 1)
-
-let count_stable board color =
-  let phase1 s =
-    let rec along_edge (i, j) (di, dj) s =
-      if valid_coordinates (i, j) && get_color board (i, j) = color then
-	along_edge (i + di, j + dj) (di, dj) (set_bit s (i, j))
-      else
-	s
+let stable (board_b, board_w, count_b, count_w) color =
+  let board = Int64.logor board_b board_w in
+  let myboard = if color = black then board_b else board_w in
+  let stable' stable_board =
+    let unflippable n upper lower =
+      let f t = Int64.logand board (Int64.logor t (Int64.shift_right_logical t n)) in
+      let g t = Int64.logand board (Int64.logor t (Int64.shift_left t n)) in
+      let upper_earthed = f (f (f (f (f (f (f (Int64.logand board upper))))))) in
+      let lower_earthed = g (g (g (g (g (g (g (Int64.logand board lower))))))) in
+      let f t = Int64.logand myboard (Int64.logor t (Int64.shift_right_logical t n)) in
+      let g t = Int64.logand myboard (Int64.logor t (Int64.shift_left t n)) in
+      let upper_earthed2 = f (f (f (f (f (f (f (Int64.logand myboard (Int64.logor upper stable_board)))))))) in
+      let lower_earthed2 = g (g (g (g (g (g (g (Int64.logand myboard (Int64.logor lower stable_board)))))))) in
+      Int64.logor (Int64.logor (Int64.logand upper_earthed lower_earthed) upper_earthed2) lower_earthed2
     in
-    let s = along_edge (0, 0) (1, 0) s in
-    let s = along_edge (0, 0) (0, 1) s in
-    let s = along_edge (0, 7) (1, 0) s in
-    let s = along_edge (0, 7) (0, -1) s in
-    let s = along_edge (7, 0) (-1, 0) s in
-    let s = along_edge (7, 0) (0, 1) s in
-    let s = along_edge (7, 7) (-1, 0) s in
-    let s = along_edge (7, 7) (0, -1) s in
-    s
+    let unflippable_NW_SE =
+      let f t = Int64.logand board (Int64.logor t (Int64.shift_right_logical (Int64.logand t (-72340172838076928L)) 9)) in
+      let g t = Int64.logand board (Int64.logor t (Int64.shift_left (Int64.logand t 35887507618889599L) 9)) in
+      let upper_earthed = f (f (f (f (f (f (f (Int64.logand board (-35887507618889600L)))))))) in
+      let lower_earthed = g (g (g (g (g (g (g (Int64.logand board 72340172838076927L))))))) in
+      let f t = Int64.logand myboard (Int64.logor t (Int64.shift_right_logical (Int64.logand t (-72340172838076928L)) 9)) in
+      let g t = Int64.logand myboard (Int64.logor t (Int64.shift_left (Int64.logand t 35887507618889599L) 9)) in
+      let upper_earthed2 = f (f (f (f (f (f (f (Int64.logand myboard (Int64.logor (-35887507618889600L) stable_board)))))))) in
+      let lower_earthed2 = g (g (g (g (g (g (g (Int64.logand myboard (Int64.logor 72340172838076927L stable_board)))))))) in
+      Int64.logor (Int64.logor (Int64.logand upper_earthed lower_earthed) upper_earthed2) lower_earthed2
+    in
+    let unflippable_NE_SW =
+      let f t = Int64.logand board (Int64.logor t (Int64.shift_right_logical (Int64.logand t 9187201950435737344L) 7)) in
+      let g t = Int64.logand board (Int64.logor t (Int64.shift_left (Int64.logand t 71775015237779198L) 7)) in
+      let upper_earthed = f (f (f (f (f (f (f (Int64.logand board (-71775015237779199L)))))))) in
+      let lower_earthed = g (g (g (g (g (g (g (Int64.logand board (-9187201950435737345L)))))))) in
+      let f t = Int64.logand myboard (Int64.logor t (Int64.shift_right_logical (Int64.logand t 9187201950435737344L) 7)) in
+      let g t = Int64.logand myboard (Int64.logor t (Int64.shift_left (Int64.logand t 71775015237779198L) 7)) in
+      let upper_earthed2 = f (f (f (f (f (f (f (Int64.logand myboard (Int64.logor (-71775015237779199L) stable_board)))))))) in
+      let lower_earthed2 = g (g (g (g (g (g (g (Int64.logand myboard (Int64.logor (-9187201950435737345L) stable_board)))))))) in
+      Int64.logor (Int64.logor (Int64.logand upper_earthed lower_earthed) upper_earthed2) lower_earthed2
+    in
+    Int64.logor stable_board (Int64.logand (Int64.logand (unflippable 8 (-72057594037927936L) 255L) (unflippable 1 (-9187201950435737472L) 72340172838076673L)) (Int64.logand unflippable_NW_SE unflippable_NE_SW))
   in
-  let phase2 s =
-    let rec filled l = match l with [] -> true | car::cdr -> get_color board car <> none && filled cdr in
-    let rec allstableandmycolor s l = match l with [] -> true | car::cdr -> get_color board car = color && get_bit s car && allstableandmycolor s cdr in
-    let check_row s (r1, r2) = (filled r1 && filled r2) || (allstableandmycolor s r1 && filled r2) || (filled r1 && allstableandmycolor s r2) in
-    let make_row (i, j) (di, dj) =
-      let rec f (i, j) (di, dj) = if valid_coordinates (i, j) then (i, j) :: f (i + di, j + dj) (di, dj) else [] in
-      (f (i - di, j - dj) (-di, -dj), f (i + di, j + dj) (di, dj)) in
-    let check s pos = check_row s (make_row pos (1, -1)) && check_row s (make_row pos (1, 0)) && check_row s (make_row pos (1, 1)) && check_row s (make_row pos (0, 1)) in
-    let rec phase2' s n =
-      if n = 64 then s
-      else let pos = (n mod 8, n / 8) in
-	   phase2' (if check s pos then (set_bit s pos) else s) (n + 1)
-    in phase2' s 0
+  let rec infinite s =
+    let s' = stable' s in
+    if s <> s' then infinite s' else s
   in
-  let (_, s) = phase2 (phase2 (phase2 (phase1 (0L, 0)))) in s
+  infinite 0L
+
 
 let evaluator_position board color =
   let scoretable = [-1; -3; -1; 0; 0; -1; -3; -1;
@@ -238,21 +238,21 @@ let evaluator_position board color =
 		    -11; -16; -1; -3; -3; -1; -16; -11;
 		    45; -11; 4; -1; -1; 4; -11; 45] in
   let scoretable = List.rev_append scoretable scoretable in
-  let rec iter st n =
+  let rec iter st n m =
     match st with
-      [] -> 0
+      [] -> m
     | s::st ->
       let (i, j) = (n mod 8, n / 8) in
       let c = get_color board (i, j) in
-      (if c = color then 1 else if c = none then 0 else -1) * s + iter st (n + 1)
+      iter st (n + 1) (if c = color then m + s else if c = none then m else m - s)
   in
-  iter scoretable 0
+  iter scoretable 0 0
 
-let evaluator_middlestage refresh next board color =
+let evaluator_middlestage refresh next (board_b, board_w, count_b, count_w) color =
   refresh ();
   let ocolor = opposite_color color in
-  let mycount = count board color in
-  let opcount = count board ocolor in
+  let mycount = count (board_b, board_w, count_b, count_w) color in
+  let opcount = count (board_b, board_w, count_b, count_w) ocolor in
   if next = none then
     if mycount > opcount then
       10000 + mycount - opcount
@@ -262,19 +262,15 @@ let evaluator_middlestage refresh next board color =
       else
 	-10000 + mycount - opcount
   else
-    let mypossibility = List.length (valid_moves board color) in
-    let oppossibility = List.length (valid_moves board ocolor) in
-    let mystable = count_stable board color in
-    let opstable = count_stable board ocolor in
-    evaluator_position board color
-    + (mystable - opstable) * 150
-    + (mypossibility - oppossibility) * 70
+    let mystable = popcnt (stable (board_b, board_w, count_b, count_w) color) in
+    let opstable = popcnt (stable (board_b, board_w, count_b, count_w) ocolor) in
+    evaluator_position (board_b, board_w, count_b, count_w) color
+    + (mystable - opstable) * 400
 
 
-let search_middlestage phase board color refresh =
+let search_middlestage phase board color refresh depth =
   let vm = valid_moves board color in
   let _ = print_human board color vm in
-  let depth = phase / 25 + 3 in
   print_string "[MIDDLE STAGE] Trying some of possible future (depth: ";
   print_int depth;
   print_endline ") ...";
@@ -285,19 +281,6 @@ let search_middlestage phase board color refresh =
   print_endline "";
   max_hand
 
-let search_midendstage board color refresh =
-  let vm = valid_moves board color in
-  let _ = print_human board color vm in
-  let depth = 10 in
-  print_string "[MID-END STAGE] Trying some of possible future (depth: ";
-  print_int depth;
-  print_endline ") ...";
-  let (max_evaluation, max_hand) = search_alphabeta board color depth (fun _ -> refresh (); count) 50
-  in
-  print_string "Evaluation: ";
-  print_int max_evaluation;
-  print_endline "";
-  max_hand
 
 let play history_code board color refresh =
   let phase = phase board in
@@ -308,13 +291,11 @@ let play history_code board color refresh =
   let result =
     if phase = 4 then
       Mv (5, 4)
-    else if phase > 47 then
+    else if phase > 48 then
       search_endstage board color refresh 33
-    else if phase > 44 then
-      search_midendstage board color refresh
     else
       match search_theory history_code board color with
-	None -> search_middlestage phase board color refresh
+	None -> search_middlestage phase board color refresh 5
       | Some mv -> mv
   in
   Printf.printf "%f seconds.\n" (Unix.gettimeofday () -. time_start);
@@ -332,17 +313,3 @@ let print_board board =
   done;
   print_endline "  (X: Black,  O: White)"
 
-
-let report_result board =
-  let _ = print_endline "========== Final Result ==========" in
-  let bc = count board black in
-  let wc = count board white in
-  if bc > wc then
-    print_endline "*Black wins!*"
-  else if bc < wc then
-    print_endline "*White wins!*"
-  else
-    print_endline "*Even*";
-  print_string "Black: "; print_endline (string_of_int bc);
-  print_string "White: "; print_endline (string_of_int wc);
-  print_board board
