@@ -3,7 +3,6 @@ open Unix
 open Command
 open Play
 open Color
-open Printf
 open Theory
 
 let opt_verbose     = ref false
@@ -139,11 +138,11 @@ and op_move (ic,oc) board color hist oname mytime =
 
 and proc_end (ic,oc) board color hist oname wl n m r =
   let _ = match wl with
-    | Win  -> printf "You win! (%d vs. %d) -- %s.\n" n m r; result_w := !result_w + 1
-    | Lose -> printf "You lose! (%d vs. %d) -- %s.\n" n m r; result_l := !result_l + 1
-    | Tie  -> printf "Draw (%d vs. %d) -- %s.\n" n m r; result_t := !result_t + 1 in
+    | Win  -> Printf.printf "You win! (%d vs. %d) -- %s.\n" n m r; result_w := !result_w + 1
+    | Lose -> Printf.printf "You lose! (%d vs. %d) -- %s.\n" n m r; result_l := !result_l + 1
+    | Tie  -> Printf.printf "Draw (%d vs. %d) -- %s.\n" n m r; result_t := !result_t + 1 in
   let _ =
-    printf "Your name: %s (%s)  Opponent name: %s (%s).\n"
+    Printf.printf "Your name: %s (%s)  Opponent name: %s (%s).\n"
       (!opt_player_name ) (string_of_color color)
       oname (string_of_color (opposite_color color)) in
 (*  let _ = print_board board in *)

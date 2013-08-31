@@ -1,4 +1,3 @@
-open Array
 open Color
 open Command
 open Theory
@@ -8,14 +7,11 @@ type board = int64 * int64 * int * int
 let init_board () : board =
   (34628173824L, 68853694464L, 2, 2)
 
-let popcnt (b : int64) =
-  let rec popcnt' b cnt =
-    if b = 0L then
-      cnt
-    else
-      popcnt' (Int64.shift_right_logical b 1) (if Int64.logand b 1L <> 0L then cnt + 1 else cnt)
-  in
-  popcnt' b 0
+let popcnt (x : int64) =
+  let x =  Int64.add (Int64.logand x 0x5555555555555555L) (Int64.shift_right_logical (Int64.logand x 0xAAAAAAAAAAAAAAAAL) 1) in
+  let x =  Int64.add (Int64.logand x 0x3333333333333333L) (Int64.shift_right_logical (Int64.logand x 0xCCCCCCCCCCCCCCCCL) 2) in
+  let x =  Int64.add (Int64.logand x 0x0F0F0F0F0F0F0F0FL) (Int64.shift_right_logical (Int64.logand x 0xF0F0F0F0F0F0F0F0L) 4) in
+  Int64.to_int (Int64.shift_right_logical (Int64.mul x 0x0101010101010101L) 56)
 
 let get_color (board_b, board_w, count_b, count_w) (i, j) =
   (* Assert 0 <= i, j <= 7 *)
@@ -58,7 +54,7 @@ let doMove (board_b, board_w, count_b, count_w) com color =
     else
       (Int64.logand board_b (Int64.lognot f), Int64.logor board_w f, count_b - n, count_w + 1 + n)
 
-let valid_moves (board_b, board_w, count_b, count_w) color =
+let valid_moves_board (board_b, board_w, count_b, count_w) color =
   let board_me = if color = black then board_b else board_w in
   let board_op = if color = white then board_b else board_w in
   let blank = Int64.lognot (Int64.logor board_b board_w) in
@@ -72,14 +68,19 @@ let valid_moves (board_b, board_w, count_b, count_w) color =
     let t = Int64.logor t (Int64.logand w (shifter t)) in
     shifter t
   in
+  Int64.logand blank (List.fold_left2 (fun b s m -> Int64.logor b (valid_moves' s m)) 0L
+  				    [(fun n -> Int64.shift_left n 9); (fun n -> Int64.shift_left n 8); (fun n -> Int64.shift_left n 7); (fun n -> Int64.shift_left n 1);
+  				     (fun n -> Int64.shift_right_logical n 1); (fun n -> Int64.shift_right_logical n 7); (fun n -> Int64.shift_right_logical n 8); (fun n -> Int64.shift_right_logical n 9)] [true;false;true;true;true;true;false;true])
+
+let valid_moves board color =
   let rec board2list b n l =
     if n < 0 then l
     else board2list (Int64.shift_right_logical b 1) (n - 1) (if Int64.logand b 1L <> 0L then n :: l else l)
   in
-  board2list (Int64.logand blank (List.fold_left2 (fun b s m -> Int64.logor b (valid_moves' s m)) 0L
-  				    [(fun n -> Int64.shift_left n 9); (fun n -> Int64.shift_left n 8); (fun n -> Int64.shift_left n 7); (fun n -> Int64.shift_left n 1);
-  				     (fun n -> Int64.shift_right_logical n 1); (fun n -> Int64.shift_right_logical n 7); (fun n -> Int64.shift_right_logical n 8); (fun n -> Int64.shift_right_logical n 9)] [true;false;true;true;true;true;false;true])) 63 []
+  board2list (valid_moves_board board color) 63 []
 
+let valid_moves_num board color =
+  popcnt (valid_moves_board board color)
 
 let print_human board color valid_moves =
   let counter = ref 1 in
@@ -105,6 +106,10 @@ let count (board_b, board_w, count_b, count_w) color =
 
 let phase (board_b, board_w, count_b, count_w) = count_b + count_w
 
+let sort_moves ms board color =
+  let ocolor = opposite_color color in
+  List.map (fun (a, _) -> a) (Sort.list (fun (a, an) (b, bn) -> an <= bn) (List.map (fun m -> (m, valid_moves_num (doMove board (Mv (m mod 8, m / 8)) color) ocolor)) ms))
+
 let search_alphabeta board color depth evaluator cut =
   let ocolor = opposite_color color in
   let rec search_me board endflag alpha beta depth =
@@ -125,7 +130,7 @@ let search_alphabeta board color depth evaluator cut =
 		     let alpha = max alpha (search_enemy nextboard false alpha beta (depth - 1)) in
 		     if alpha >= beta then beta else search ms alpha
 	in
-	search ms alpha
+	search (sort_moves ms board color) alpha
   and search_enemy board endflag alpha beta depth =
     if depth = 0 then
       evaluator ocolor board color
@@ -144,7 +149,7 @@ let search_alphabeta board color depth evaluator cut =
 		     let beta = min beta (search_me nextboard false alpha beta (depth - 1)) in
 		     if alpha >= beta then alpha else search ms beta
 	in
-	search ms beta
+	search (sort_moves ms board ocolor) beta
   in
   let rec search_firstmove board ms max_s max_hand depth =
     match ms with
@@ -159,7 +164,7 @@ let search_alphabeta board color depth evaluator cut =
 	       else
 		 search_firstmove board ms max_s max_hand depth
   in
-  search_firstmove board (valid_moves board color) (-99999) Pass depth
+  search_firstmove board (sort_moves (valid_moves board color) board color) (-99999) Pass depth
 
 let search_endstage board color refresh cut =
   let vm = valid_moves board color in
