@@ -251,9 +251,9 @@ let evaluator_position board color =
 let evaluator_middlestage refresh next (board_b, board_w, count_b, count_w) color =
   refresh ();
   let ocolor = opposite_color color in
-  let mycount = count (board_b, board_w, count_b, count_w) color in
-  let opcount = count (board_b, board_w, count_b, count_w) ocolor in
   if next = none then
+    let mycount = count (board_b, board_w, count_b, count_w) color in
+    let opcount = count (board_b, board_w, count_b, count_w) ocolor in
     if mycount > opcount then
       10000 + mycount - opcount
     else
