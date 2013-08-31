@@ -239,19 +239,20 @@ let stable (board_b, board_w, count_b, count_w) color =
   infinite 0L
 
 let evaluator_edge (board_b, board_w, count_b, count_w) color =
-  let s = if color = black then 1 else -1 in
   let edge p q r =
     let b = popcnt (Int64.logand board_b p) in
     let w = popcnt (Int64.logand board_b p) in
-    if b = 8 then 100 * s
-    else if b = 7 then (8 -  w) * 10 * s
-    else if b = 6 then if w = 1 then 60 * s else 70 * s
-    else if b = 5 then if popcnt (Int64.logand board_b q) > 3 then 30 * s else 40 * s
-    else if b = 4 then if popcnt (Int64.logand board_b r) = 4 then 45 * s else 20 * s
+    if b = 8 then 100
+    else if b = 7 then (8 -  w) * 10
+    else if b = 6 then if w = 1 then 60 else 70
+    else if b = 5 then if popcnt (Int64.logand board_b q) > 3 then 30 else 40
+    else if b = 4 then if popcnt (Int64.logand board_b r) = 4 then 45 else 20
     else 0
   in
-  edge 255L 170L 60L + edge (-72057594037927936L) (-6196953087261802496L) 4323455642275676160L
-  + edge (-9187201950435737472L) (-9223231297218904064L) 141289400041472L + edge 72340172838076673L 72058693566333184L 141289400041472L
+  if color = black then (edge 255L 170L 60L + edge (-72057594037927936L) (-6196953087261802496L) 4323455642275676160L
+       + edge (-9187201950435737472L) (-9223231297218904064L) 141289400041472L + edge 72340172838076673L 72058693566333184L 141289400041472L)
+  else -(edge 255L 170L 60L + edge (-72057594037927936L) (-6196953087261802496L) 4323455642275676160L
+       + edge (-9187201950435737472L) (-9223231297218904064L) 141289400041472L + edge 72340172838076673L 72058693566333184L 141289400041472L)
 
 let evaluator_position board color =
   let scoretable = [-1; -3; -1; 0; 0; -1; -3; -1;
@@ -317,7 +318,7 @@ let play history_code board color refresh =
       search_endstage board color refresh 33
     else
       match search_theory history_code board color with
-	None -> search_middlestage phase board color refresh (4 + phase / 30)
+	None -> search_middlestage phase board color refresh (4 + phase / 20)
       | Some mv -> mv
   in
   Printf.printf "%f seconds.\n" (Unix.gettimeofday () -. time_start);
