@@ -231,6 +231,20 @@ let stable (board_b, board_w, count_b, count_w) color =
   in
   infinite 0L
 
+let evaluator_edge (board_b, board_w, count_b, count_w) color =
+  let s = if color = black then 1 else -1 in
+  let edge p q r =
+    let b = popcnt (Int64.logand board_b p) in
+    let w = popcnt (Int64.logand board_b p) in
+    if b = 8 then 100 * s
+    else if b = 7 then (8 -  w) * 10 * s
+    else if b = 6 then if w = 1 then 60 * s else 70 * s
+    else if b = 5 then if popcnt (Int64.logand board_b q) > 3 then 30 * s else 40 * s
+    else if b = 4 then if popcnt (Int64.logand board_b r) = 4 then 45 * s else 20 * s
+    else 0
+  in
+  edge 255L 170L 60L + edge (-72057594037927936L) (-6196953087261802496L) 4323455642275676160L
+  + edge (-9187201950435737472L) (-9223231297218904064L) 141289400041472L + edge 72340172838076673L 72058693566333184L 141289400041472L
 
 let evaluator_position board color =
   let scoretable = [-1; -3; -1; 0; 0; -1; -3; -1;
@@ -265,6 +279,7 @@ let evaluator_middlestage refresh next (board_b, board_w, count_b, count_w) colo
     let mystable = popcnt (stable (board_b, board_w, count_b, count_w) color) in
     let opstable = popcnt (stable (board_b, board_w, count_b, count_w) ocolor) in
     evaluator_position (board_b, board_w, count_b, count_w) color
+    + evaluator_edge (board_b, board_w, count_b, count_w) color
     + (mystable - opstable) * 400
 
 
