@@ -84,6 +84,7 @@ let valid_moves board color =
 let valid_moves_num board color =
   popcnt (valid_moves_board board color)
 
+(*
 let print_human board color valid_moves =
   let counter = ref 1 in
   (* print_string "\x1b[2J"; *)
@@ -101,6 +102,7 @@ let print_human board color valid_moves =
     done;
     print_endline ""
   done
+*)
 
 
 let count (board_b, board_w, count_b, count_w) color =
@@ -169,14 +171,8 @@ let search_alphabeta board color depth evaluator cut =
   search_firstmove board (sort_moves (valid_moves board color) board color) (-99999) Pass depth
 
 let search_endstage board color refresh cut =
-  let vm = valid_moves board color in
-  let _ = print_human board color vm in
-  print_endline "[END STAGE] Computing all possible moves...";
-  let (max_s, max_hand) = search_alphabeta board color (-1) (fun _ -> refresh (); count) cut
+  let (_, max_hand) = search_alphabeta board color (-1) (fun _ -> refresh (); count) cut
   in
-  print_string "Expectation: ";
-  print_int max_s;
-  print_endline "";
   max_hand
 
 let search_theory hist board color =
@@ -184,12 +180,10 @@ let search_theory hist board color =
   let rec search theory =
     match theory with
       [] ->
-	print_endline "[EARLY STAGE] No theory found";
 	None
     | t::ts ->
       if theory_enroute t hist len then
-	( print_endline "[EARLY STAGE] I know theory!";
-	  Some (theory_decode t.[len]) )
+	Some (theory_decode t.[len])
       else search ts
   in search theory_opening
 
@@ -292,37 +286,21 @@ let evaluator_middlestage refresh next (board_b, board_w, count_b, count_w) colo
 
 
 let search_middlestage phase board color refresh depth =
-  let vm = valid_moves board color in
-  let _ = print_human board color vm in
-  print_string "[MIDDLE STAGE] Trying some of possible future (depth: ";
-  print_int depth;
-  print_endline ") ...";
-  let (max_evaluation, max_hand) = search_alphabeta board color depth (evaluator_middlestage refresh) 99999999
+  let (_, max_hand) = search_alphabeta board color depth (evaluator_middlestage refresh) 99999999
   in
-  print_string "Evaluation: ";
-  print_int max_evaluation;
-  print_endline "";
   max_hand
 
 
 let play history_code board color refresh =
   let phase = phase board in
-  print_string "Phase: ";
-  print_int phase;
-  print_endline "";
-  let time_start = Unix.gettimeofday () in
-  let result =
-    if phase = 4 then
-      Mv (5, 4)
-    else if phase > 47 then
-      search_endstage board color refresh 33
-    else
-      match search_theory history_code board color with
-	None -> search_middlestage phase board color refresh (4 + phase / 20)
-      | Some mv -> mv
-  in
-  Printf.printf "%f seconds.\n" (Unix.gettimeofday () -. time_start);
-  result
+  if phase = 4 then
+    Mv (5, 4)
+  else if phase > 47 then
+    search_endstage board color refresh 33
+  else
+    match search_theory history_code board color with
+      None -> search_middlestage phase board color refresh (4 + phase / 20)
+    | Some mv -> mv
 
 let print_board board =
   print_endline " |A B C D E F G H ";

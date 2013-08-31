@@ -145,8 +145,8 @@ and proc_end (ic,oc) board color hist oname wl n m r =
     Printf.printf "Your name: %s (%s)  Opponent name: %s (%s).\n"
       (!opt_player_name ) (string_of_color color)
       oname (string_of_color (opposite_color color)) in
-(*  let _ = print_board board in *)
-  let _ = print_human board black [] in
+  let _ = print_board board in
+(*  let _ = print_human board black [] in*)
   let _ = print_hist  hist  in
   wait_start (ic,oc)
 
