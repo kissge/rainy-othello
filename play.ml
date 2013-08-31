@@ -43,16 +43,18 @@ let flip (board_b, board_w, count_b, count_w) color n =
      (fun n -> Int64.shift_right_logical n 1); (fun n -> Int64.shift_right_logical n 7); (fun n -> Int64.shift_right_logical n 8); (fun n -> Int64.shift_right_logical n 9)] [true;false;true;true;true;true;false;true] in
   (Int64.logor n_bit flipboard, popcnt flipboard)
 
-let doMove (board_b, board_w, count_b, count_w) com color =
+let doMove' (board_b, board_w, count_b, count_w) n color =
+  let (f, n) = flip (board_b, board_w, count_b, count_w) color n in
+  if color = black then
+    (Int64.logor board_b f, Int64.logand board_w (Int64.lognot f), count_b + 1 + n, count_w - n)
+  else
+    (Int64.logand board_b (Int64.lognot f), Int64.logor board_w f, count_b - n, count_w + 1 + n)
+
+let doMove board com color =
   match com with
-    GiveUp  -> (board_b, board_w, count_b, count_w)
-  | Pass    -> (board_b, board_w, count_b, count_w)
-  | Mv (i, j) ->
-    let (f, n) = flip (board_b, board_w, count_b, count_w) color (i + j * 8) in
-    if color = black then
-      (Int64.logor board_b f, Int64.logand board_w (Int64.lognot f), count_b + 1 + n, count_w - n)
-    else
-      (Int64.logand board_b (Int64.lognot f), Int64.logor board_w f, count_b - n, count_w + 1 + n)
+    Mv (i, j) -> doMove' board (i + j * 8) color
+  | _ -> board
+
 
 let valid_moves_board (board_b, board_w, count_b, count_w) color =
   let board_me = if color = black then board_b else board_w in
@@ -108,7 +110,7 @@ let phase (board_b, board_w, count_b, count_w) = count_b + count_w
 
 let sort_moves ms board color =
   let ocolor = opposite_color color in
-  List.map (fun (a, _) -> a) (Sort.list (fun (a, an) (b, bn) -> an <= bn) (List.map (fun m -> (m, valid_moves_num (doMove board (Mv (m mod 8, m / 8)) color) ocolor)) ms))
+  List.map (fun (a, _) -> a) (Sort.list (fun (a, an) (b, bn) -> an <= bn) (List.map (fun m -> (m, valid_moves_num (doMove' board m color) ocolor)) ms))
 
 let search_alphabeta board color depth evaluator cut =
   let ocolor = opposite_color color in
@@ -126,7 +128,7 @@ let search_alphabeta board color depth evaluator cut =
 	let rec search ms alpha =
 	  match ms with
 	    [] -> alpha
-	  | n::ms -> let nextboard = doMove board (Mv (n mod 8, n / 8)) color in
+	  | n::ms -> let nextboard = doMove' board n color in
 		     let alpha = max alpha (search_enemy nextboard false alpha beta (depth - 1)) in
 		     if alpha >= beta then beta else search ms alpha
 	in
@@ -145,7 +147,7 @@ let search_alphabeta board color depth evaluator cut =
 	let rec search ms beta =
 	  match ms with
 	    [] -> beta
-	  | n::ms -> let nextboard = doMove board (Mv (n mod 8, n / 8)) ocolor in
+	  | n::ms -> let nextboard = doMove' board n ocolor in
 		     let beta = min beta (search_me nextboard false alpha beta (depth - 1)) in
 		     if alpha >= beta then alpha else search ms beta
 	in
@@ -154,7 +156,7 @@ let search_alphabeta board color depth evaluator cut =
   let rec search_firstmove board ms max_s max_hand depth =
     match ms with
       [] -> (max_s, max_hand)
-    | n::ms -> let nextboard = doMove board (Mv (n mod 8, n / 8)) color in
+    | n::ms -> let nextboard = doMove' board n color in
 	       let try_s = search_enemy nextboard false (-99999) 99999 (depth - 1) in
 	       if max_s <= try_s then
 		 if try_s < cut then
@@ -311,11 +313,11 @@ let play history_code board color refresh =
   let result =
     if phase = 4 then
       Mv (5, 4)
-    else if phase > 48 then
+    else if phase > 47 then
       search_endstage board color refresh 33
     else
       match search_theory history_code board color with
-	None -> search_middlestage phase board color refresh 5
+	None -> search_middlestage phase board color refresh (4 + phase / 30)
       | Some mv -> mv
   in
   Printf.printf "%f seconds.\n" (Unix.gettimeofday () -. time_start);
